@@ -27,6 +27,39 @@ inheritance more clear
 
 * finds classes that inherit from the input or output packet base class
 
+example:
+--------
+
+JPEX decompiler, after "rename invalid identifiers"
+
+package
+{
+   public class class_546 extends class_7
+   {
+      public function class_546(param1:String)
+      {
+         super(class_134.method_2400(class_143.var_6097),class_134.method_2400(class_168.var_6705));
+         var_164.writeUTF(param1);
+      }
+   }
+}
+
+JPEX decompiler, after running this tool first (rename invalid
+identifiers not needed)
+
+package
+{
+   public class packet_out_0078 extends PacketOut
+   {
+      public function packet_out_0078(param1:String)
+      {
+         super(31,5);
+         var_0280.writeUTF(param1);
+      }
+   }
+}
+
+
 license note:
 -------------
 
