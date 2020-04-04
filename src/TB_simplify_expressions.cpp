@@ -331,19 +331,19 @@ void DFile::swap_static_vars(BufferReader &reader, BufferWriter &writer, const i
 {
 	OpPeeker peeker(reader, code_len);
 	OpPeeker lookahead(reader, code_len);
-	OpArg next_op_arg;
+	OpArg next_op_arg[2];
 	OpArg op_arg[2];
-	lookahead.next(&next_op_arg, 1);
+	lookahead.next(next_op_arg, 2);
 	for ( ; ; ) {
 		const uint8_t op_code = peeker.next(op_arg, 2);
-		const uint8_t next_op_code = lookahead.next(&next_op_arg, 1);
+		const uint8_t next_op_code = lookahead.next(next_op_arg, 2);
 		if (op_code == 0)
 			return;
 		bool flush_instruction = true;
 		int nops_to_write = 0;
-		if (op_code == abc::OP_getlex && next_op_code == abc::OP_getproperty) {
+		if (op_code == abc::OP_getlex && (next_op_code == abc::OP_getproperty || next_op_code == abc::OP_callproperty)) {
 			abc::Multiname *const class_mn = &abc_file.multiname_pool[op_arg[0].u30];
-			abc::Multiname *const trait_mn = &abc_file.multiname_pool[next_op_arg.u30];
+			abc::Multiname *const trait_mn = &abc_file.multiname_pool[next_op_arg[0].u30];
 			auto iter = static_classes.find(class_mn);
 			if (iter != static_classes.end()) {
 				Variant my_value = 0;
@@ -368,7 +368,7 @@ void DFile::swap_static_vars(BufferReader &reader, BufferWriter &writer, const i
 					nops_to_write = space_available - write_size;
 					reader += space_available;
 					peeker.next(op_arg, 2);
-					lookahead.next(&next_op_arg, 1);
+					lookahead.next(next_op_arg, 2);
 					flush_instruction = false;
 				}
 			}
@@ -445,93 +445,115 @@ bool DStaticClass::find_trait(abc::Multiname *mn, Variant &out_value) const
 	return true;
 }
 
+static bool do_math_ops(DFile &dfile, Stack &stack, const uint8_t op_code, OpArg *op_arg)
+{
+	switch (op_code) {
+	case abc::OP_pushbyte:
+		stack.push(op_arg[0].sbyte);
+		break;
+	case abc::OP_pushshort:
+		stack.push(op_arg[0].s30);
+		break;
+	case abc::OP_pushint:
+		stack.push(dfile.abc_file.int_pool[op_arg[0].u30]);
+		break;
+	case abc::OP_pushuint:
+		stack.push(dfile.abc_file.uint_pool[op_arg[0].u30]);
+		break;
+	case abc::OP_pushstring:
+		stack.push(dfile.abc_file.string_pool[op_arg[0].u30]);
+		break;
+	case abc::OP_pushfalse:
+	case abc::OP_pushnull:
+		stack.push(0);
+		break;
+	case abc::OP_pushtrue:
+		stack.push(1);
+		break;
+	case abc::OP_not: {
+		Variant v = stack.pop();
+		if (v.is_i32()) {
+			if (v.as_i32())
+				stack.push(0);
+			else
+				stack.push(1);
+		} else {
+			stack.push(0);
+		}
+		break;
+	}
+	case abc::OP_equals:
+		if (stack.pop() == stack.pop())
+			stack.push(1);
+		else
+			stack.push(0);
+		break;
+	case abc::OP_dup:
+		stack.push(stack.top());
+		break;
+	case abc::OP_pop:
+		stack.pop();
+		break;
+	case abc::OP_add: {
+		Variant rhs = stack.pop();
+		Variant lhs = stack.pop();
+		if (lhs.is_i32() && rhs.is_i32()) {
+			stack.push(lhs.as_i32() + rhs.as_i32());
+		} else if (lhs.is_i32()) {
+			stack.push(std::to_string(lhs.as_i32()) + rhs.as_str());
+		} else if (rhs.is_i32()) {
+			stack.push(lhs.as_str() + std::to_string(rhs.as_i32()));
+		} else {
+			// both strings
+			stack.push(lhs.as_str() + rhs.as_str());
+		}
+		break;
+	}
+	case abc::OP_multiply:
+		stack.push(stack.pop().as_i32()*stack.pop().as_i32());
+		break;
+	case abc::OP_divide: {
+		const int32_t rhs = stack.pop().as_i32();
+		const int32_t lhs = stack.pop().as_i32();
+		if (lhs == 0 || rhs == 0)
+			stack.push(0);
+		else
+			stack.push(lhs / rhs);
+		break;
+	}
+	case abc::OP_nop:
+	case abc::OP_label:
+		// do nothing;
+		return true;
+	default:
+		return false;
+	}
+	return true;
+}
+
 DStaticClass::DStaticClass(abc::Class *cl, DFile &dfile)
 {
 	m_successful_static_init = true;
 	try {
 		const Buffer &code = cl->static_ctor->code;
+		if (code.empty()) {
+			m_successful_static_init = false;
+			return;
+		}
 		BufferReader reader(code);
 		OpPeeker peeker(reader, code.size());
 		Stack stack;
-		for ( ; ; ) {
+		bool not_done = true;
+		while (not_done) {
 			OpArg op_arg[2];
 			const uint8_t op_code = peeker.next(op_arg, 2);
+			if (do_math_ops(dfile, stack, op_code, op_arg)) {
+				continue;
+			}
 			switch (op_code) {
 			case abc::OP_returnvoid:
-				return;
-			case abc::OP_pushbyte:
-				stack.push(op_arg[0].sbyte);
+				not_done = false;
 				break;
-			case abc::OP_pushshort:
-				stack.push(op_arg[0].s30);
-				break;
-			case abc::OP_pushint:
-				stack.push(dfile.abc_file.int_pool[op_arg[0].u30]);
-				break;
-			case abc::OP_pushuint:
-				stack.push(dfile.abc_file.uint_pool[op_arg[0].u30]);
-				break;
-			case abc::OP_pushstring:
-				stack.push(dfile.abc_file.string_pool[op_arg[0].u30]);
-				break;
-			case abc::OP_pushfalse:
-			case abc::OP_getproperty:
-				stack.push(0);
-				break;
-			case abc::OP_pushtrue:
-				stack.push(1);
-				break;
-			case abc::OP_not: {
-				Variant v = stack.pop();
-				if (v.is_i32()) {
-					if (v.as_i32())
-						stack.push(0);
-					else
-						stack.push(1);
-				} else {
-					stack.push(0);
-				}
-				break;
-			}
-			case abc::OP_equals:
-				if (stack.pop() == stack.pop())
-					stack.push(1);
-				else
-					stack.push(0);
-				break;
-			case abc::OP_dup:
-				stack.push(stack.top());
-				break;
-			case abc::OP_pop:
-				stack.pop();
-				break;
-			case abc::OP_add: {
-				Variant rhs = stack.pop();
-				Variant lhs = stack.pop();
-				if (lhs.is_i32() && rhs.is_i32()) {
-					stack.push(lhs.as_i32() + rhs.as_i32());
-				} else if (lhs.is_i32()) {
-					stack.push(std::to_string(lhs.as_i32()) + rhs.as_str());
-				} else if (rhs.is_i32()) {
-					stack.push(lhs.as_str() + std::to_string(rhs.as_i32()));
-				} else {
-					// both strings
-					stack.push(lhs.as_str() + rhs.as_str());
-				}
-				break;
-			}
-			case abc::OP_multiply:
-				stack.push(stack.pop().as_i32()*stack.pop().as_i32());
-				break;
-			case abc::OP_divide: {
-				const int32_t rhs = stack.pop().as_i32();
-				const int32_t lhs = stack.pop().as_i32();
-				if (lhs == 0 || rhs == 0)
-					stack.push(0);
-				else
-					stack.push(lhs / rhs);
-				break;
-			}
 			case abc::OP_setproperty:
 			case abc::OP_initproperty: {
 				abc::Multiname *const mn = &dfile.abc_file.multiname_pool[op_arg[0].u30];
@@ -545,6 +567,9 @@ DStaticClass::DStaticClass(abc::Class *cl, DFile &dfile)
 				}
 				break;
 			}
+			case abc::OP_getproperty:
+				stack.push(0);
+				break;
 			case abc::OP_getlocal0:
 			case abc::OP_pushscope:
 			case abc::OP_findproperty:
@@ -554,11 +579,52 @@ DStaticClass::DStaticClass(abc::Class *cl, DFile &dfile)
 				break;
 			default:
 				m_successful_static_init = false;
-				return;
+				not_done = false;
 			}
 		}
 	} catch (int) {
 		m_successful_static_init = false;
+	}
+	if (! m_successful_static_init)
+		return;
+	for (auto t : cl->static_traits) {
+		abc::Method *method = nullptr;
+		if (t.is_function()) {
+			method = t.as_function.method;
+		} else if (t.is_method()) {
+			method = t.as_method.method;
+		} else {
+			continue;
+		}
+		const Buffer &code = method->code;
+		if (code.empty())
+			continue;
+		BufferReader reader(code);
+		OpPeeker peeker(reader, code.size());
+		Stack stack;
+		bool not_done = true;
+		try {
+			while (not_done) {
+				OpArg op_arg;
+				const uint8_t op_code = peeker.next(&op_arg, 1);
+				if (do_math_ops(dfile, stack, op_code, &op_arg)) {
+					continue;
+				}
+				switch (op_code) {
+				case abc::OP_getlocal0:
+				case abc::OP_pushscope:
+					// do nothing
+					break;
+				case abc::OP_returnvalue:
+					traits.emplace(t.name, stack.pop());
+					not_done = false;
+					break;
+				default:
+					not_done = false;
+				}
+			}
+		} catch (int) {
+		}
 	}
 }
 
@@ -587,32 +653,12 @@ void DFile::process_packet_out(BufferReader &reader, const int code_len, abc::Mu
 	for ( ; ; ) {
 		OpArg op_arg;
 		const uint8_t op_code = peeker.next(&op_arg, 1);
+		if (do_math_ops(*this, stack, op_code, &op_arg)) {
+			continue;
+		}
 		switch (op_code) {
 		case abc::OP_returnvoid:
 			return;
-		case abc::OP_pushbyte:
-			stack.push(op_arg.sbyte);
-			break;
-		case abc::OP_pushshort:
-			stack.push(op_arg.s30);
-			break;
-		case abc::OP_pushint:
-			stack.push(abc_file.int_pool[op_arg.u30]);
-			break;
-		case abc::OP_pushuint:
-			stack.push(abc_file.uint_pool[op_arg.u30]);
-			break;
-		case abc::OP_pushstring:
-			stack.push(abc_file.string_pool[op_arg.u30]);
-			break;
-		case abc::OP_pushfalse:
-		case abc::OP_getproperty:
-		case abc::OP_pushnull:
-			stack.push(0);
-			break;
-		case abc::OP_pushtrue:
-			stack.push(1);
-			break;
 		case abc::OP_pushscope:
 		case abc::OP_coerce:
 		case abc::OP_getlocal:
@@ -620,7 +666,6 @@ void DFile::process_packet_out(BufferReader &reader, const int code_len, abc::Mu
 		case abc::OP_getlocal1:
 		case abc::OP_getlocal2:
 		case abc::OP_getlocal3:
-		case abc::OP_nop:
 			// do nothing
 			break;
 		case abc::OP_setlocal:
