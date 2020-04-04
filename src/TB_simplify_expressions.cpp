@@ -133,9 +133,11 @@ public:
 	abc::AbcFile &abc_file;
 	DFile(abc::AbcFile &l_abc_file);
 	void write_back();
+	void reload();
 	//void process_method(BufferReader &reader, BufferWriter &writer, const int code_len);
 	void swap_static_vars(BufferReader &reader, BufferWriter &writer, const int code_len, std::map<abc::Multiname *, DStaticClass> &static_classes, abc::Multiname *coerce_mn, const std::set<abc::Multiname *> &bad_methods);
 	void remove_static_write_entries(Buffer &input, std::map<abc::Multiname *, DStaticClass> &static_classes, std::map<abc::Multiname *, abc::Multiname *> &trait_map);
+	void DFile::process_packet_out(BufferReader &reader, const int code_len, abc::Multiname *mn);
 };
 
 uint8_t OpPeeker::next(OpArg *args, const int arg_count)
@@ -185,6 +187,7 @@ uint8_t OpPeeker::next(OpArg *args, const int arg_count)
 template <typename T>
 void DFile::generic_init(std::map<T, uint32_t> &map, const std::vector<T> &vec)
 {
+	map.clear();
 	for (unsigned i = 1; i < vec.size(); ++i) {
 		map.emplace(vec[i], i);
 	}
@@ -193,6 +196,15 @@ void DFile::generic_init(std::map<T, uint32_t> &map, const std::vector<T> &vec)
 DFile::DFile(abc::AbcFile &l_abc_file)
 	: abc_file(l_abc_file)
 {
+	reload();
+}
+
+void DFile::reload()
+{
+	i32_map_ext.clear();
+	u32_map_ext.clear();
+	f64_map_ext.clear();
+	str_map_ext.clear();
 	generic_init(i32_map, abc_file.int_pool);
 	generic_init(u32_map, abc_file.uint_pool);
 	generic_init(f64_map, abc_file.double_pool);
@@ -568,6 +580,74 @@ static void disassemble_all(DFile &dfile)
 }
 #endif
 
+void DFile::process_packet_out(BufferReader &reader, const int code_len, abc::Multiname *mn)
+{
+	OpPeeker peeker(reader, code_len);
+	Stack stack;
+	for ( ; ; ) {
+		OpArg op_arg;
+		const uint8_t op_code = peeker.next(&op_arg, 1);
+		switch (op_code) {
+		case abc::OP_returnvoid:
+			return;
+		case abc::OP_pushbyte:
+			stack.push(op_arg.sbyte);
+			break;
+		case abc::OP_pushshort:
+			stack.push(op_arg.s30);
+			break;
+		case abc::OP_pushint:
+			stack.push(abc_file.int_pool[op_arg.u30]);
+			break;
+		case abc::OP_pushuint:
+			stack.push(abc_file.uint_pool[op_arg.u30]);
+			break;
+		case abc::OP_pushstring:
+			stack.push(abc_file.string_pool[op_arg.u30]);
+			break;
+		case abc::OP_pushfalse:
+		case abc::OP_getproperty:
+		case abc::OP_pushnull:
+			stack.push(0);
+			break;
+		case abc::OP_pushtrue:
+			stack.push(1);
+			break;
+		case abc::OP_pushscope:
+		case abc::OP_coerce:
+		case abc::OP_getlocal:
+		case abc::OP_getlocal0:
+		case abc::OP_getlocal1:
+		case abc::OP_getlocal2:
+		case abc::OP_getlocal3:
+		case abc::OP_nop:
+			// do nothing
+			break;
+		case abc::OP_setlocal:
+		case abc::OP_setlocal0:
+		case abc::OP_setlocal1:
+		case abc::OP_setlocal2:
+		case abc::OP_setlocal3:
+			stack.pop();
+			break;
+		case abc::OP_constructsuper: {
+			if (op_arg.u30 != 2) {
+				trace(op_arg.u30);
+				fatal("constructsuper without arg count = 2");
+			}
+			const int32_t CC = stack.pop().as_i32();
+			const int32_t C = stack.pop().as_i32();
+			*grab_name(*mn) = std::string("PacketOut_") + std::to_string(C) + std::string("_") + std::to_string(CC);
+			return;
+		}
+		default:
+			trace(*grab_name(*mn));
+			trace(abc::OP::name[op_code]);
+			fatal("unhandled opcode when processing packet");
+		}
+	}
+}
+
 void ToolBox::simplify_expressions()
 {
 	TRACE << "disassembling" << std::endl;
@@ -620,6 +700,15 @@ void ToolBox::simplify_expressions()
 		dfile.swap_static_vars(reader, writer, input.size(), static_classes, coerce_mn, bad_methods);
 		output.resize(writer.raw_ptr() - &output[0]);
 		input = std::move(output);
+	}
+	dfile.write_back();
+	dfile.reload();
+	for (auto c : abc_file.class_pool) {
+		if (c.super == packet_out_mn) {
+			Buffer &input = c.ctor->code;
+			BufferReader reader(input);
+			dfile.process_packet_out(reader, input.size(), c.name);
+		}
 	}
 	dfile.write_back();
 	TRACE << "finished disassembling" << std::endl;

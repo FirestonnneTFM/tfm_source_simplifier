@@ -49,16 +49,15 @@ identifiers not needed)
 
 package
 {
-   public class packet_out_0078 extends PacketOut
+   public class PacketOut_31_5 extends PacketOut
    {
-      public function packet_out_0078(param1:String)
+      public function PacketOut_31_5(param1:String)
       {
          super(31,5);
          var_0280.writeUTF(param1);
       }
    }
 }
-
 
 license note:
 -------------
