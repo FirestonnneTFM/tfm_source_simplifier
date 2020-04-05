@@ -41,6 +41,7 @@ int main(int argc, char **argv)
 	{
 		ToolBox tb(actionscript);
 		tb.rename_by_inheritance();
+		//tb.rename_by_traits();
 		tb.rename_invalid_identifiers();
 		tb.simplify_expressions();
 #ifdef INVESTIGATE
@@ -48,6 +49,7 @@ int main(int argc, char **argv)
 		tb.rename_by_inheritance();
 		TRACE << "... DONE INVESTIGATING INHERITANCE" << std::endl;
 #endif
+		tb.rename_by_traits();
 	}
 	TRACE << "old DoABC size: " << do_abc_tag.buffer.size() << std::endl;
 	{

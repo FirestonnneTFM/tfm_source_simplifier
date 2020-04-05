@@ -322,6 +322,10 @@ void ToolBox::rename_by_inheritance()
 		TRACE << *grab_name(*graph[i].second) << " : " << graph[i].first << std::endl;
 	}
 #endif
+	if (*grab_name(*graph[0].second) != "Object") {
+		fatal("graph[0] is not Object");
+	}
+	object_mn = graph[0].second;
 	packet_out_mn = graph[1].second;
 	packet_in_mn = graph[2].second;
 	if (*grab_name(*graph[4].second) == "_PaquetSortant") {

@@ -6,6 +6,7 @@ target_sources(tfm_src_simple PUBLIC
 	Buffer.hpp
 	common.cpp
 	common.hpp
+	TB_rename_by_trait.cpp
 	TB_rename_identifiers.cpp
 	TB_simplify_expressions.cpp
 	ToolBox.hpp
