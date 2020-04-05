@@ -10,11 +10,13 @@ class ToolBox {
 	abc::Multiname *packet_in_mn = nullptr;
 	abc::Multiname *ui_el_mn = nullptr;
 	abc::Multiname *coerce_mn = nullptr;
+	abc::Multiname *object_mn = nullptr;
 public:
 	ToolBox(abc::AbcFile &l_abc_file)
 		: abc_file(l_abc_file)
 		{}
 	void rename_by_inheritance();
+	void rename_by_traits();
 	void rename_invalid_identifiers();
 	void simplify_expressions();
 };
