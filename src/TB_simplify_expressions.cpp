@@ -137,7 +137,7 @@ public:
 	//void process_method(BufferReader &reader, BufferWriter &writer, const int code_len);
 	void swap_static_vars(BufferReader &reader, BufferWriter &writer, const int code_len, std::map<abc::Multiname *, DStaticClass> &static_classes, abc::Multiname *coerce_mn, const std::set<abc::Multiname *> &bad_methods);
 	void remove_static_write_entries(Buffer &input, std::map<abc::Multiname *, DStaticClass> &static_classes, std::map<abc::Multiname *, abc::Multiname *> &trait_map);
-	void DFile::process_packet_out(BufferReader &reader, const int code_len, abc::Multiname *mn);
+	void process_packet_out(BufferReader &reader, const int code_len, abc::Multiname *mn);
 };
 
 uint8_t OpPeeker::next(OpArg *args, const int arg_count)
