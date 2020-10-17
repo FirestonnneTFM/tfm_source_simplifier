@@ -661,6 +661,8 @@ void DFile::process_packet_out(BufferReader &reader, const int code_len, abc::Mu
 			return;
 		case abc::OP_pushscope:
 		case abc::OP_coerce:
+		case abc::OP_coerce_s:
+		case abc::OP_coerce_a:
 		case abc::OP_getlocal:
 		case abc::OP_getlocal0:
 		case abc::OP_getlocal1:
