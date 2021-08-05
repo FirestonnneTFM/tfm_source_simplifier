@@ -50,7 +50,7 @@ public:
 	bool operator== (const Variant &rhs) const {
 		if (is_i32() && rhs.is_i32())
 			return as_i32() == rhs.as_i32();
-		if (is_str() && rhs.is_i32())
+		if (is_str() && rhs.is_str())
 			return as_str() == rhs.as_str();
 		return false;
 	}
@@ -215,7 +215,7 @@ template<typename T>
 void DFile::generic_writeback(std::map<T, uint32_t> &map_ext, std::vector<T> &vec)
 {
 	vec.resize(vec.size() + map_ext.size());
-	for (auto item : map_ext) {
+	for (auto &item : map_ext) {
 		const uint32_t i = item.second;
 		const T value = item.first;
 		if (i >= vec.size()) {
@@ -587,7 +587,7 @@ DStaticClass::DStaticClass(abc::Class *cl, DFile &dfile)
 	}
 	if (! m_successful_static_init)
 		return;
-	for (auto t : cl->static_traits) {
+	for (auto &t : cl->static_traits) {
 		abc::Method *method = nullptr;
 		if (t.is_function()) {
 			method = t.as_function.method;
@@ -704,7 +704,7 @@ void ToolBox::simplify_expressions()
 	for (unsigned i = 0; i < abc_file.class_pool.size(); ++i) {
 		abc::Class *const c = &abc_file.class_pool[i];
 		if (c->name == coerce_mn) {
-			for (auto trait : c->static_traits) {
+			for (auto &trait : c->static_traits) {
 				bad_methods.insert(trait.name);
 			}
 		} else if (c->traits.empty() && !c->static_traits.empty()) {
@@ -716,8 +716,8 @@ void ToolBox::simplify_expressions()
 	trace(bad_methods.size());
 	{
 		std::map<abc::Multiname *, abc::Multiname *> trait_map;
-		for (auto cl : static_classes) {
-			for (auto tr : cl.second.traits) {
+		for (auto &cl : static_classes) {
+			for (auto &tr : cl.second.traits) {
 				trait_map.emplace(tr.first, cl.first);
 			}
 		}
@@ -750,7 +750,7 @@ void ToolBox::simplify_expressions()
 	}
 	dfile.write_back();
 	dfile.reload();
-	for (auto c : abc_file.class_pool) {
+	for (auto &c : abc_file.class_pool) {
 		if (c.super == packet_out_mn) {
 			Buffer &input = c.ctor->code;
 			BufferReader reader(input);

@@ -226,7 +226,7 @@ void abc::AbcFile::write_to(BufferWriter &writer) const
 	// write scripts
 	{
 		writer.u30(script_pool.size());
-		for (auto script : script_pool) {
+		for (auto &script : script_pool) {
 			writer.u30(v_o(method_pool, script.entry_point));
 			write_class_traits(writer, script.traits);
 		}

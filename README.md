@@ -1,37 +1,34 @@
-compile commands:
------------------
+# What does this do?
 
-first extract zlib from the zip folder, so that the current directory
-has a zlib-x.x.x subdirectory
+* Removes the layers of indirection regarding the static classes full of constants
 
+* Generally renames the invalid class names in a way that makes their inheritance more clear
+
+* Finds classes that inherit from the input or output packet base class
+
+# Compile Commands
+
+First extract zlib from the zip folder, so that the current directory has a zlib-x.x.x subdirectory
+
+```
 $ mkdir build
 $ cd build
 $ cmake ..
-( note: running just `make` will probably fail because the zlib tests
-don't compile )
 $ make tfm_src_simple
+```
+(Note: running just `make` will try to compile zlib tests which may fail preventing you from compiling. That's why I recommend typing the full target name above)
 
-run command:
-------------
+# Run Command
 
+```
 $ ./tfm_src_simple input_file.swf output_file.swf
+```
 
-features:
----------
+# Example
 
-* removes the layers of indirection regarding the static classes full of
-constants
+Before: decompiled with JPEX decompiler, after "rename invalid identifiers"
 
-* generally renames the invalid class names in a way that makes their
-inheritance more clear
-
-* finds classes that inherit from the input or output packet base class
-
-example:
---------
-
-JPEX decompiler, after "rename invalid identifiers"
-
+```actionscript
 package
 {
    public class class_546 extends class_7
@@ -43,10 +40,11 @@ package
       }
    }
 }
+```
 
-JPEX decompiler, after running this tool first (rename invalid
-identifiers not needed)
+After: decompiled with JPEX decompiler after running this tool first (rename invalid identifiers does not need to be run)
 
+```actionscript
 package
 {
    public class PacketOut_31_5 extends PacketOut
@@ -54,21 +52,21 @@ package
       public function PacketOut_31_5(param1:String)
       {
          super(31,5);
-         var_0280.writeUTF(param1);
+         buffer.writeUTF(param1);
       }
    }
 }
+```
 
-license:
---------
+# License
 
 zlib is distributed under it's own license
 
 see: https://www.zlib.net/zlib_license.html
 
-The rest of the code: GPLv3
+The rest of the code is under GPLv3
 
-Copyright (C) 2020
+Copyright (C) 2020 - 2021
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
