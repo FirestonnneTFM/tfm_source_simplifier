@@ -15,6 +15,7 @@ public:
 		: abc_file(l_abc_file)
 		{}
 	void rename_by_inheritance();
+	void rename_box2d();
 	void rename_invalid_identifiers();
 	void simplify_expressions();
 };
@@ -39,4 +40,18 @@ static inline std::string *grab_name(abc::Multiname &mn)
 		break;
 	}
 	return name;
+}
+
+static inline bool is_character_valid(char c)
+{
+	return (c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c == '_' || c == '$';
+}
+
+static inline bool is_string_invalid(const std::string &s)
+{
+	for (const auto &c : s) {
+		if (! is_character_valid(c))
+			return true;
+	}
+	return false;
 }

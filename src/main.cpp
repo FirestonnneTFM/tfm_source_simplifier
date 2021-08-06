@@ -40,6 +40,7 @@ int main(int argc, char **argv)
 	abc::AbcFile actionscript(abc_reader);
 	{
 		ToolBox tb(actionscript);
+		tb.rename_box2d();
 		tb.rename_by_inheritance();
 		tb.rename_invalid_identifiers();
 		tb.simplify_expressions();
@@ -61,4 +62,5 @@ int main(int argc, char **argv)
 	TRACE << "writing file" << std::endl;
 	tfm.write_to(output_fname);
 	TRACE << "finished writing file" << std::endl;
+	return 0;
 }

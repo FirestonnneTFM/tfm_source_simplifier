@@ -6,9 +6,13 @@
 
 * Finds classes that inherit from the input or output packet base class
 
+* Locates 74 classes related to Box2D and renames them
+
 # Compile Commands
 
 First extract zlib from the zip folder, so that the current directory has a zlib-x.x.x subdirectory
+
+These are the commands I run on the Windows Linux subsystem, it probably works on every platform, including native windows via Visual Studio.
 
 ```
 $ mkdir build

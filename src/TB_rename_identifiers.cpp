@@ -20,20 +20,6 @@ static inline char letter(int n)
 		return static_cast<char>(n - 26) + 'A';
 }
 
-static bool is_character_valid(char c)
-{
-	return (c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c == '_' || c == '$';
-}
-
-static bool is_invalid(const std::string &s)
-{
-	for (auto &c : s) {
-		if (! is_character_valid(c))
-			return true;
-	}
-	return false;
-}
-
 class NameGenerator {
 	std::string plate;
 	int offset;
@@ -69,7 +55,7 @@ public:
 static inline void rename_if_invalid(abc::Multiname &mn, NameGenerator &gen)
 {
 	std::string *const name = grab_name(mn);
-	if (name && is_invalid(*name)) {
+	if (name && is_string_invalid(*name)) {
 		*name = gen.next();
 	}
 }
@@ -148,7 +134,7 @@ void ToolBox::rename_invalid_identifiers()
 			MN_ptr mn = stack.back().first;
 			std::vector<int> list = stack.back().second;
 			std::string &old_name = *grab_name(*mn);
-			if (is_invalid(old_name)) {
+			if (is_string_invalid(old_name)) {
 				old_name = make_tag(prefixes, list);
 			}
 			stack.pop_back();
