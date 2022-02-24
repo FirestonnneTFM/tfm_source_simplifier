@@ -8,32 +8,39 @@
 #include <cstring>
 #include <math.h>
 #include <variant>
+#include <sstream>
+
+template<typename T>
+static std::string my_to_string(const T &n)
+{
+	std::ostringstream ss;
+	ss << n;
+	return ss.str();
+}
 
 class Variant {
 private:
-	std::variant<int32_t, std::string> cont;
-	bool m_is_bool;
+	std::variant<int32_t, std::string, double, bool> cont;
 public:
 	Variant(std::string s)
-		: cont(s), m_is_bool(false) {}
+		: cont(s) {}
 	Variant(int32_t n)
-		: cont(n), m_is_bool(false) {}
+		: cont(n) {}
+	Variant(double n)
+		: cont(n) {}
+	Variant(bool n)
+		: cont(n) {}
 	bool is_str() const {
 		return std::holds_alternative<std::string>(cont);
 	}
 	bool is_i32() const {
 		return std::holds_alternative<int32_t>(cont);
 	}
-	bool is_bool() const {
-		return m_is_bool;
+	bool is_f64() const {
+		return std::holds_alternative<double>(cont);
 	}
-	void to_bool() {
-		if (m_is_bool)
-			return;
-		m_is_bool = true;
-		if (is_str()) {
-			cont = (as_str() == "") ? 0 : 1;
-		}
+	bool is_bool() const {
+		return std::holds_alternative<bool>(cont);
 	}
 	std::string &as_str() {
 		return std::get<std::string>(cont);
@@ -41,18 +48,60 @@ public:
 	int32_t &as_i32() {
 		return std::get<int32_t>(cont);
 	}
+	double &as_f64() {
+		return std::get<double>(cont);
+	}
+	bool &as_bool() {
+		return std::get<bool>(cont);
+	}
 	const std::string &as_str() const {
 		return std::get<std::string>(cont);
 	}
 	const int32_t &as_i32() const {
 		return std::get<int32_t>(cont);
 	}
+	const double &as_f64() const {
+		return std::get<double>(cont);
+	}
+	const bool &as_bool() const {
+		return std::get<bool>(cont);
+	}
 	bool operator== (const Variant &rhs) const {
-		if (is_i32() && rhs.is_i32())
-			return as_i32() == rhs.as_i32();
 		if (is_str() && rhs.is_str())
 			return as_str() == rhs.as_str();
-		return false;
+		return get_number_value() == rhs.get_number_value();
+	}
+	bool get_bool_value() const {
+		if (is_str())
+			return as_str() == "";
+		if (is_f64())
+			return as_f64() != 0.0;
+		if (is_i32())
+			return as_i32();
+		return as_bool();
+	}
+	std::string get_string_value() const {
+		if (is_i32())
+			return my_to_string(as_i32());
+		if (is_f64())
+			return my_to_string(as_f64());
+		if (is_bool())
+			return as_bool() ? "true" : "false";
+		return as_str();
+	}
+	double get_number_value() const {
+		if (is_i32())
+			return static_cast<double>(as_i32());
+		if (is_f64())
+			return as_f64();
+		if (is_bool())
+			return as_bool() ? 1.0 : 0.0;
+		try {
+			return std::stod(as_str());
+		}
+		catch(...) {
+			return NAN;
+		}
 	}
 };
 
@@ -350,7 +399,7 @@ void DFile::swap_static_vars(BufferReader &reader, BufferWriter &writer, const i
 				if (iter->second.find_trait(trait_mn, my_value)) {
 					const uint8_t *const base_ptr = writer.raw_ptr();
 					if (my_value.is_bool()) {
-						if (my_value.as_i32()) {
+						if (my_value.as_bool()) {
 							writer << abc::OP_pushtrue;
 						}
 						else {
@@ -359,6 +408,9 @@ void DFile::swap_static_vars(BufferReader &reader, BufferWriter &writer, const i
 					} else if (my_value.is_i32()) {
 						writer << abc::OP_pushint;
 						writer.u30(lookup_i32(my_value.as_i32()));
+					} else if (my_value.is_f64()) {
+						writer << abc::OP_pushdouble;
+						writer.u30(lookup_f64(my_value.as_f64()));
 					} else {
 						writer << abc::OP_pushstring;
 						writer.u30(lookup_str(my_value.as_str()));
@@ -458,35 +510,30 @@ static bool do_math_ops(DFile &dfile, Stack &stack, const uint8_t op_code, OpArg
 		stack.push(dfile.abc_file.int_pool[op_arg[0].u30]);
 		break;
 	case abc::OP_pushuint:
-		stack.push(dfile.abc_file.uint_pool[op_arg[0].u30]);
+		stack.push(static_cast<int>(dfile.abc_file.uint_pool[op_arg[0].u30]));
 		break;
 	case abc::OP_pushstring:
 		stack.push(dfile.abc_file.string_pool[op_arg[0].u30]);
 		break;
-	case abc::OP_pushfalse:
+	case abc::OP_pushdouble:
+		stack.push(dfile.abc_file.double_pool[op_arg[0].u30]);
+		break;
+	case abc::OP_pushundefined:
+	case abc::OP_pushuninitialized:
 	case abc::OP_pushnull:
 		stack.push(0);
 		break;
+	case abc::OP_pushfalse:
+		stack.push(false);
+		break;
 	case abc::OP_pushtrue:
-		stack.push(1);
+		stack.push(true);
 		break;
-	case abc::OP_not: {
-		Variant v = stack.pop();
-		if (v.is_i32()) {
-			if (v.as_i32())
-				stack.push(0);
-			else
-				stack.push(1);
-		} else {
-			stack.push(0);
-		}
+	case abc::OP_not:
+		stack.push(! stack.pop().get_bool_value());
 		break;
-	}
 	case abc::OP_equals:
-		if (stack.pop() == stack.pop())
-			stack.push(1);
-		else
-			stack.push(0);
+		stack.push(stack.pop() == stack.pop());
 		break;
 	case abc::OP_dup:
 		stack.push(stack.top());
@@ -497,28 +544,19 @@ static bool do_math_ops(DFile &dfile, Stack &stack, const uint8_t op_code, OpArg
 	case abc::OP_add: {
 		Variant rhs = stack.pop();
 		Variant lhs = stack.pop();
-		if (lhs.is_i32() && rhs.is_i32()) {
-			stack.push(lhs.as_i32() + rhs.as_i32());
-		} else if (lhs.is_i32()) {
-			stack.push(std::to_string(lhs.as_i32()) + rhs.as_str());
-		} else if (rhs.is_i32()) {
-			stack.push(lhs.as_str() + std::to_string(rhs.as_i32()));
-		} else {
-			// both strings
-			stack.push(lhs.as_str() + rhs.as_str());
-		}
+		if (lhs.is_str() || rhs.is_str())
+			stack.push(lhs.get_string_value() + rhs.get_string_value());
+		else
+			stack.push(lhs.get_number_value() + rhs.get_number_value());
 		break;
 	}
 	case abc::OP_multiply:
-		stack.push(stack.pop().as_i32()*stack.pop().as_i32());
+		stack.push(stack.pop().get_number_value() * stack.pop().get_number_value());
 		break;
 	case abc::OP_divide: {
-		const int32_t rhs = stack.pop().as_i32();
-		const int32_t lhs = stack.pop().as_i32();
-		if (lhs == 0 || rhs == 0)
-			stack.push(0);
-		else
-			stack.push(lhs / rhs);
+		Variant rhs = stack.pop();
+		Variant lhs = stack.pop();
+		stack.push(lhs.get_number_value() / rhs.get_number_value());
 		break;
 	}
 	case abc::OP_nop:
@@ -563,7 +601,7 @@ DStaticClass::DStaticClass(abc::Class *cl, DFile &dfile)
 			case abc::OP_callproperty: {
 				abc::Multiname *const mn = &dfile.abc_file.multiname_pool[op_arg[0].u30];
 				if (*grab_name(*mn) == "Boolean") {
-					stack.top().to_bool();
+					stack.top() = stack.top().get_bool_value();
 				}
 				break;
 			}
@@ -682,15 +720,16 @@ void DFile::process_packet_out(BufferReader &reader, const int code_len, abc::Mu
 				trace(op_arg.u30);
 				fatal("constructsuper without arg count = 2");
 			}
-			const int32_t CC = stack.pop().as_i32();
-			const int32_t C = stack.pop().as_i32();
-			*grab_name(*mn) = std::string("PacketOut_") + std::to_string(C) + std::string("_") + std::to_string(CC);
+			const std::string CC = stack.pop().get_string_value();
+			const std::string C = stack.pop().get_string_value();
+			*grab_name(*mn) = std::string("PacketOut_") + C + std::string("_") + CC;
 			return;
 		}
 		default:
 			trace(*grab_name(*mn));
 			trace(abc::OP::name[op_code]);
 			fatal("unhandled opcode when processing packet");
+			return;
 		}
 	}
 }
